@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Cyan shadow and neon-green face create a luminous streaming play mark. -->
+    <path android:fillColor="#6600E5FF" android:pathData="M38,27 L82,54 L38,81 Z" />
+    <path android:fillColor="#00FF88" android:pathData="M34,23 L78,50 L34,77 Z" />
+    <path android:fillColor="#CCFFFFFF" android:pathData="M42,36 L65,50 L42,64 Z" />
+</vector>
