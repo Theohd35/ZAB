@@ -13,65 +13,92 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
 public class MainActivity extends Activity {
-    private static final String HOME_URL = "https://zaborv.com/o81vqqzrvs9a75/home/zaborv";
+    private static final String HOME_URL = "https://didvip.com/b6ig41m4d/c/didvip/29/0";
     private static final int IMMERSIVE_FLAGS = View.SYSTEM_UI_FLAG_FULLSCREEN
             | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
 
-    private WebView myWebView;
+    private WebView webView;
     private FrameLayout rootView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    private String navigationScript;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
 
         rootView = new FrameLayout(this);
         rootView.setBackgroundColor(Color.BLACK);
-        myWebView = new WebView(this);
-        rootView.addView(myWebView, new FrameLayout.LayoutParams(
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.BLACK);
+        rootView.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(rootView);
 
+        navigationScript = readAsset("tv-navigation.js");
         configureWebView();
         if (savedInstanceState == null) {
-            myWebView.loadUrl(HOME_URL);
-        } else {
-            myWebView.restoreState(savedInstanceState);
+            webView.loadUrl(HOME_URL);
+        } else if (webView.restoreState(savedInstanceState) == null) {
+            webView.loadUrl(HOME_URL);
+        }
+    }
+
+    private String readAsset(String name) {
+        try (InputStream input = getAssets().open(name)) {
+            byte[] bytes = new byte[input.available()];
+            int offset = 0;
+            while (offset < bytes.length) {
+                int count = input.read(bytes, offset, bytes.length - offset);
+                if (count < 0) break;
+                offset += count;
+            }
+            return new String(bytes, 0, offset, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            throw new IllegalStateException("Unable to load TV navigation script", error);
         }
     }
 
     private void configureWebView() {
-        myWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        myWebView.setVerticalScrollBarEnabled(false);
-        myWebView.setHorizontalScrollBarEnabled(false);
-        myWebView.setFocusable(true);
-        myWebView.setFocusableInTouchMode(true);
-        myWebView.requestFocus();
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setVerticalScrollBarEnabled(false);
+        webView.setHorizontalScrollBarEnabled(false);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
 
-        WebSettings settings = myWebView.getSettings();
+        WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
-        // RenderPriority is deprecated on newer WebView releases, but remains useful on
-        // the Android 11 WebView shipped with the target Formuler hardware.
-        settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
 
-        myWebView.setWebViewClient(new WebViewClient() {
+        webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectTvNavigationStyles(view);
+                view.evaluateJavascript(navigationScript, null);
             }
         });
 
-        myWebView.setWebChromeClient(new WebChromeClient() {
+        webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
@@ -80,7 +107,7 @@ public class MainActivity extends Activity {
                 }
                 customView = view;
                 customViewCallback = callback;
-                myWebView.setVisibility(View.GONE);
+                webView.setVisibility(View.GONE);
                 rootView.addView(view, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 view.requestFocus();
@@ -94,42 +121,12 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void injectTvNavigationStyles(WebView view) {
-        String javascript = "(function(){"
-                + "var id='zaborv-tv-styles';"
-                + "var old=document.getElementById(id);if(old){old.remove();}"
-                + "var style=document.createElement('style');style.id=id;"
-                + "style.textContent='::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}"
-                + "a:focus,button:focus,[tabindex]:focus{outline:none!important;"
-                + "box-shadow:0 0 10px 3px #E50914!important;border-radius:4px!important;}';"
-                + "(document.head||document.documentElement).appendChild(style);"
-                + "var labels=['poster','synopsis','regarder','nouveautés','tendances'];"
-                + "document.querySelectorAll('a,button,[role=\\\"button\\\"],nav *').forEach(function(el){"
-                + "var label=(el.textContent||'').trim().toLowerCase();"
-                + "if(labels.indexOf(label)!==-1){var target=el.closest('a,button,[role=\\\"button\\\"]')||el;"
-                + "if(!target.hasAttribute('tabindex'))target.tabIndex=0;}});"
-                + "function fullscreen(video){if(!video)return;"
-                + "var request=video.requestFullscreen||video.webkitRequestFullscreen;"
-                + "if(request&&!document.fullscreenElement&&!document.webkitFullscreenElement){"
-                + "try{var result=request.call(video);if(result&&result.catch)result.catch(function(){});}catch(ignore){}}}"
-                + "if(!window.__zaborvVideoHandlers){window.__zaborvVideoHandlers=true;"
-                + "document.addEventListener('play',function(e){if(e.target&&e.target.tagName==='VIDEO')"
-                + "fullscreen(e.target);},true);"
-                + "document.addEventListener('click',function(e){var item=e.target.closest('a,button,[role=\\\"button\\\"]');"
-                + "if(item&&(item.textContent||'').trim().toLowerCase()==='regarder')"
-                + "setTimeout(function(){fullscreen(document.querySelector('video'));},0);},true);}"
-                + "})();";
-        view.evaluateJavascript(javascript, null);
-    }
-
     private void hideCustomView() {
-        if (customView == null) {
-            return;
-        }
+        if (customView == null) return;
         rootView.removeView(customView);
         customView = null;
-        myWebView.setVisibility(View.VISIBLE);
-        myWebView.requestFocus();
+        webView.setVisibility(View.VISIBLE);
+        webView.requestFocus();
         setImmersiveMode(false);
         if (customViewCallback != null) {
             customViewCallback.onCustomViewHidden();
@@ -150,44 +147,56 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        // Android can reveal system chrome while the video surface is changing. Reapply
-        // immersive sticky mode as soon as the fullscreen window regains focus.
-        if (hasFocus && customView != null) {
-            setImmersiveMode(true);
-        }
+        if (hasFocus && customView != null) setImmersiveMode(true);
     }
 
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (customView != null) {
-                hideCustomView();
-                return true;
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && customView == null) {
+            String direction = null;
+            switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_DPAD_UP: direction = "up"; break;
+                case KeyEvent.KEYCODE_DPAD_DOWN: direction = "down"; break;
+                case KeyEvent.KEYCODE_DPAD_LEFT: direction = "left"; break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT: direction = "right"; break;
+                case KeyEvent.KEYCODE_DPAD_CENTER:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER: direction = "select"; break;
+                default: break;
             }
-            if (myWebView.canGoBack()) {
-                myWebView.goBack();
+            if (direction != null) {
+                webView.evaluateJavascript("window.__didvipTv&&window.__didvipTv('" + direction + "')", null);
                 return true;
             }
         }
-        return super.onKeyDown(keyCode, event);
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (customView != null) {
+            hideCustomView();
+        } else if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
-        myWebView.saveState(outState);
+        webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
 
     @Override
     protected void onDestroy() {
-        if (customView != null) {
-            hideCustomView();
-        }
-        rootView.removeView(myWebView);
-        myWebView.stopLoading();
-        myWebView.setWebChromeClient(null);
-        myWebView.setWebViewClient(null);
-        myWebView.destroy();
+        if (customView != null) hideCustomView();
+        rootView.removeView(webView);
+        webView.stopLoading();
+        webView.setWebChromeClient(null);
+        webView.setWebViewClient(null);
+        webView.destroy();
         super.onDestroy();
     }
 }
