@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -52,6 +53,9 @@ public class MainActivity extends Activity {
 
         WebSettings settings = myWebView.getSettings();
         settings.setJavaScriptEnabled(true);
+        // RenderPriority is deprecated on newer WebView releases, but remains useful on
+        // the Android 11 WebView shipped with the target Formuler hardware.
+        settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -95,13 +99,37 @@ public class MainActivity extends Activity {
                 + "var id='zaborv-tv-styles';"
                 + "var old=document.getElementById(id);if(old){old.remove();}"
                 + "var style=document.createElement('style');style.id=id;"
-                + "style.textContent='html{scroll-behavior:smooth!important;}"
-                + "::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}"
-                + "a:focus,button:focus,[tabindex]:focus,.card:focus,.movie-item:focus{"
-                + "outline:4px solid #00FF88!important;outline-offset:3px!important;"
-                + "transform:scale(1.05)!important;transition:transform .2s ease,outline .2s ease!important;"
-                + "z-index:9999!important;}';"
+                + "style.textContent='::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}"
+                + "a:focus,button:focus,[tabindex]:focus,.card:focus,.movie-item:focus,div[role=\\\"button\\\"]:focus{"
+                + "outline:none!important;box-shadow:0 0 12px 3px rgba(229,9,20,.8)!important;"
+                + "border-radius:6px!important;}';"
                 + "(document.head||document.documentElement).appendChild(style);"
+                + "var selector='a,button,[tabindex],.card,.movie-item,div[role=\\\"button\\\"]';"
+                + "function each(scope,query,callback){if(scope.matches&&scope.matches(query))callback(scope);"
+                + "scope.querySelectorAll(query).forEach(callback);}"
+                + "function prepare(scope){each(scope,'.card,.movie-item,div[role=\\\"button\\\"]',"
+                + "function(el){if(!el.hasAttribute('tabindex'))el.tabIndex=0;});}"
+                + "prepare(document);"
+                + "if(!window.__zaborvObserver){window.__zaborvObserver=new MutationObserver(function(records){"
+                + "records.forEach(function(record){record.addedNodes.forEach(function(node){"
+                + "if(node.nodeType===1){prepare(node);bindVideos(node);}});});});"
+                + "window.__zaborvObserver.observe(document.documentElement,{childList:true,subtree:true});}"
+                + "if(!window.__zaborvDownNavigation){window.__zaborvDownNavigation=true;"
+                + "document.addEventListener('keydown',function(e){if(e.key!=='ArrowDown')return;"
+                + "var from=document.activeElement;var start=from&&from.getBoundingClientRect();if(!start)return;"
+                + "setTimeout(function(){if(document.activeElement!==from)return;"
+                + "var best=null,bestScore=Infinity;document.querySelectorAll(selector).forEach(function(el){"
+                + "if(el===from||el.disabled||el.tabIndex<0)return;var r=el.getBoundingClientRect();"
+                + "if(r.width<1||r.height<1||r.bottom<=start.bottom)return;"
+                + "var dy=Math.max(0,r.top-start.bottom),dx=Math.abs((r.left+r.right-start.left-start.right)/2);"
+                + "var score=dy*10+dx;if(score<bestScore){bestScore=score;best=el;}});"
+                + "if(best){best.focus();best.scrollIntoView({block:'center',inline:'nearest'});}},0);},false);}"
+                + "function bindVideos(scope){each(scope,'video',function(v){"
+                + "if(v.dataset.zaborvFullscreen)return;v.dataset.zaborvFullscreen='true';"
+                + "v.addEventListener('play',function(){var request=v.requestFullscreen||v.webkitRequestFullscreen;"
+                + "if(request&&!document.fullscreenElement&&!document.webkitFullscreenElement){"
+                + "try{var result=request.call(v);if(result&&result.catch)result.catch(function(){});}catch(ignore){}}});});}"
+                + "bindVideos(document);"
                 + "})();";
         view.evaluateJavascript(javascript, null);
     }
@@ -122,7 +150,23 @@ public class MainActivity extends Activity {
     }
 
     private void setImmersiveMode(boolean enabled) {
-        getWindow().getDecorView().setSystemUiVisibility(enabled ? IMMERSIVE_FLAGS : View.SYSTEM_UI_FLAG_VISIBLE);
+        if (enabled) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().setSystemUiVisibility(IMMERSIVE_FLAGS);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Android can reveal system chrome while the video surface is changing. Reapply
+        // immersive sticky mode as soon as the fullscreen window regains focus.
+        if (hasFocus && customView != null) {
+            setImmersiveMode(true);
+        }
     }
 
     @Override
